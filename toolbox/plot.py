@@ -2,6 +2,7 @@
 Plotting module
 """
 
+from io import BytesIO
 import matplotlib as mpl
 from matplotlib.axes import Axes
 from matplotlib.colors import Normalize, BoundaryNorm, Colormap
@@ -10,10 +11,134 @@ from matplotlib import pyplot as plt
 from matplotlib.ticker import PercentFormatter
 import numpy as np
 import pandas as pd
+from PIL import Image
+from rasterio.transform import array_bounds, from_bounds
+from rasterio.warp import calculate_default_transform, reproject, Resampling
+import requests
 
 import sys
 sys.path.append("src")
+from tb.toolbox.geoprocessing import coords_reproj
 from tb.toolbox.math import *
+
+def fetch_wmts(ax:Axes, xlim:tuple, ylim:tuple, crs="EPSG:4326", 
+                highres=False, **kwargs):
+    """
+    Fetch and add web map tiles based on x and y limits to existing plot.
+    Additional keyword arguments will be used to adjust the map tiles in the 
+    plot.
+
+    Parameters
+    ----------
+    ax : mpl.axes.Axes
+        Axis of which the plot will be casted to
+    xlim, ylim : tuple
+        X- and Y- limits of the current axes
+    crs : str, default "EPSG:4326"
+        Map projection in "EPSG:XXXX" format
+    highres : bool, default False
+        If true, fetch higher resolution basemap by zooming in more
+    """
+
+    # Note: the convention here is 
+    # src - Incoming web map tiles from online database
+    # dst - Requested projection by user
+    src_crs = "EPSG:4326"
+
+    # Default magnification
+    mag = 2 if highres else 1
+
+    # ==========================================================================
+    # HELPER FUNCTIONS
+    # ==========================================================================
+
+    def num2deg(xtile, ytile, zoom):
+        """Converts tile index to longitude/latitude"""
+        n = 2 ** zoom
+        lon = xtile/n*360 - 180
+        lat = np.atan(np.sinh(np.pi*(1 - 2*ytile/n)))/np.pi*180
+        return lon, lat
+    
+    def deg2num(lon, lat, zoom):
+        """Converts longitude/latitude to tile index"""
+        n = 2 ** zoom
+        xtile = int((lon + 180)/360*n)
+        ytile = int((1 - np.arcsinh(np.tan(lat/180*np.pi))/np.pi)/2*n)
+        return xtile, ytile
+    
+
+    # ==========================================================================
+    # PREPROCESSING
+    # ==========================================================================
+
+    # Get list of reprojected viewport corners in source projection (4326)
+    X, Y = np.meshgrid(xlim, ylim)
+    dst_corners = np.c_[X.ravel(), Y.ravel()]
+    src_corners = coords_reproj(dst_corners, crs, src_crs)
+    src_xlim, src_ylim = zip(src_corners.min(axis=0), src_corners.max(axis=0))
+
+    # Estimate zoom level
+    # The algorithm below obtains the maximum zoom level that has at least 2
+    # independent tiles in each direction (i.e. 4 minimum total). More tiles
+    # might be fetched if the viewport is elogated or has a weird shape
+    for zoom in range(0, 22, 1):
+        dx, dy = np.array(deg2num(src_xlim[1], src_ylim[0], zoom)) - \
+                    np.array(deg2num(src_xlim[0], src_ylim[1], zoom))
+        if min(dx, dy) >= mag: 
+            break
+    
+    # Now find the tile indices and coordinates of boundaries in both directions
+    xtile, ytile = deg2num(src_xlim[0], src_ylim[1], zoom)
+    coords = (*num2deg(xtile, ytile+dy+1, zoom), *num2deg(xtile+dx+1, ytile, zoom))
+    
+
+    # ==========================================================================
+    # DATA FETCHING
+    # ==========================================================================
+
+    # Indexing fetched images
+    xindex = [None] + [1024*x for x in range(1, dx+1)] + [None]
+    yindex = [None] + [1024*x for x in range(1, dy+1)] + [None]
+    
+    # Pull 1024x1024 web map tiles from online host (MapBox)
+    # Might not work if API key has expired
+    # Finally rearrange data into source matrix
+    src = np.zeros((3, 1024*(dy+1), 1024*(dx+1)), np.uint8)
+    for yi, yt in enumerate(range(ytile, ytile+dy+1)):
+        for xi, xt in enumerate(range(xtile, xtile+dx+1)):
+            url = "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/" \
+                + "%d/%d/%d@2x?"%(zoom, xt, yt) \
+                + "access_token=pk.eyJ1Ijoic29yamFpOTUyNyIsImEiOiJjbTYwOGQ1bD" \
+                + "UwYjhyMnFvdW9lajh4NGQ3In0.Grq5KxiNFLrruzRSrk2QAA"
+            html = requests.get(url)
+            bm = np.moveaxis(np.array(Image.open(BytesIO(html.content))), 
+                                     (0,1,2), (1,2,0))
+            src[:,yindex[yi]:yindex[yi+1],xindex[xi]:xindex[xi+1]] = bm
+
+
+    # ==========================================================================
+    # DATA PROCESSING
+    # ==========================================================================
+
+    # Define source and destination transform (affine) matrices
+    src_transform = from_bounds(*coords, 1024*(dx+1), 1024*(dy+1))
+    dst_transform, width, height = calculate_default_transform(src_crs,
+                                    crs, 1024*(dx+1), 1024*(dy+1), *coords)
+    
+    # Reproject tiles
+    dst = np.zeros((3, height, width), dtype=np.uint8)
+    reproject(src, dst, src_transform=src_transform, src_crs=src_crs,
+              dst_transform=dst_transform, dst_crs=crs,
+              resampling=Resampling.nearest, dst_nodata=255)
+    
+    # Obtain bounds of the reprojected tiles
+    dst_bounds = array_bounds(height, width, dst_transform)
+    dst_bounds = (dst_bounds[0], dst_bounds[2], dst_bounds[1], dst_bounds[3])
+    
+    # Add to plot
+    ax.imshow(np.moveaxis(dst, (0,1,2), (2,0,1)), extent=dst_bounds, **kwargs)
+
+    return None
 
 def plot_rose(ax:Axes, rad:np.ndarray, ang:np.ndarray, rad_bin_edge=None, 
     ang_nbins=16, arrow_dir=None, legend_title="Legend", fmt="%.01f"):
