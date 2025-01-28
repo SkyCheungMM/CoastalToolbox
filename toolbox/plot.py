@@ -16,10 +16,8 @@ from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import requests
 
-import sys
-sys.path.append("src")
-from tb.toolbox.geoprocessing import coords_reproj
-from tb.toolbox.math import *
+from .geoprocessing import coords_reproj
+from .math import *
 
 def fetch_wmts(ax:Axes, xlim:tuple, ylim:tuple, crs="EPSG:4326", 
                 highres=False, **kwargs):

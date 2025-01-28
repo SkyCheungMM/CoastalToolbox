@@ -11,9 +11,7 @@ import numpy as np
 import pandas as pd
 from striprtf.striprtf import rtf_to_text
 
-import sys
-sys.path.append("src")
-from tb.toolbox.utils import *
+from .utils import *
 
 class OptimoorBase(object):
     """Base class for OPTIMOOR-related classes."""

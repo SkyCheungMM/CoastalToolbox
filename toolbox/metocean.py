@@ -6,13 +6,10 @@ import cmocean
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 import numpy as np
-from ocean_wave_tracing import Wave_tracing
 import rasterio
 from rasterio.plot import show
 
-import sys
-sys.path.append("src")
-from tb.toolbox.utils import *
+from .utils import *
 
 def crest_distribution(X:np.ndarray, Hs:float, model="rayleigh", Tm=None, 
                        km=None, d=None, dir_spread=True):
@@ -845,6 +842,8 @@ class Ray_Tracing(object):
         waves on variable currents at arbitrary depths, Geosci. Model Dev., 16, 
         6515–6530, https://doi.org/10.5194/gmd-16-6515-2023, 2023.
         """
+
+        from ocean_wave_tracing import Wave_tracing
         
         # Fetch data
         Z = self.Z
