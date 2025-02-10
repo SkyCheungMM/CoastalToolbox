@@ -619,7 +619,7 @@ class OPTSimulation(OptimoorBase):
 
         # Column names
         mlnames = ["Fairlead", "Bollard", "Pull-in", "Length", "In-Line_Motion",
-                "Winch_Slip", "Downward_Inclinaion", "Tension", "Strength_Pct"]
+                "Winch_Slip", "Downward_Inclination", "Tension", "Strength_Pct"]
         
         # Get index of last character in the header to partition the table
         namerow = f[rows_mline[0]+1]
