@@ -527,6 +527,7 @@ class OPTSimulation(OptimoorBase):
             "Bottom Clearance"              : "Bottom_Clearance",
             "Fwd Offset of Vessel Target"   : "VSL_Fwd_Offset",
             "Vessel Port Target"            : "VSL_Vrt_Offset",
+            "Vessel Stbd Target"            : "VSL_Vrt_Offset",
             "Significant Wave Ht"           : "Hs",
             "Wave Mean Period"              : "Tm",
             "Wave Direction from"           : "MWD",
